@@ -1,0 +1,29 @@
+# Raw competition images — large, re-derivable from the Zindi download
+data/images/
+
+# Experiment checkpoints and other large run artifacts
+experiments/*/checkpoints/
+
+# Model weights of any kind
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.onnx
+*.ckpt
+
+# Virtual environments
+.venv-kraken/
+.venv-vlm/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/

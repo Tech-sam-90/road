@@ -1,0 +1,14 @@
+# Shared dependencies for src/metrics, src/data, src/ensemble, and general
+# repo tooling (notebooks, submission packaging, etc).
+#
+# GPU-heavy, conflicting stacks (kraken, transformers/Qwen VLM) live in their
+# own isolated environments instead: see src/kraken/requirements.txt
+# (.venv-kraken) and src/vlm/requirements.txt (.venv-vlm).
+
+pandas>=2.0
+numpy
+Pillow
+tqdm
+jiwer
+pyyaml
+matplotlib

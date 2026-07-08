@@ -1,0 +1,13 @@
+# Isolated env: .venv-kraken
+# Kraken pins its own torch/numpy versions that clash with the
+# transformers/Qwen VLM stack in src/vlm — keep these separate.
+
+kraken==6.0.3
+pandas>=2.0
+pyyaml
+Pillow
+numpy
+evaluate
+jiwer
+tqdm
+torch>=2.0.0,<3.0
