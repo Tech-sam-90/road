@@ -18,6 +18,14 @@ experiments/*/checkpoints/
 .venv/
 venv/
 
+# Narval: generated at prefetch time, contains allocation-specific absolute
+# paths (see runners/narval/.env.narval.example for the template)
+runners/narval/.env.narval
+runners/narval/*.out
+
+# Colab / rclone: never commit the OAuth token config
+rclone.conf
+
 # Python
 __pycache__/
 *.pyc

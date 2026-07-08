@@ -1,0 +1,80 @@
+#!/bin/bash
+# Qwen2.5-VL fine-tuning job. Needs real time/mem/GPU — request accordingly.
+# Max job duration on Narval is 7 days; we request 2 here as a sane default
+# for a LoRA fine-tune — bump --time up (and --gpus-per-node if you want
+# multi-GPU) for a full run, but remember it queues, so bigger != faster to
+# start.
+#
+# NOTE: src/vlm/train.py + src/vlm/config.yaml don't exist yet (built in a
+# later prompt). This script assumes an interface mirroring the starter's
+# trainer.py plus a --resume_from_checkpoint flag (standard HF Trainer/
+# TrainingArguments convention) wired in per the plan for that later prompt.
+#
+#SBATCH --account=<FILL_IN_YOUR_ALLOCATION>
+#SBATCH --job-name=road-vlm-train
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=2-00:00:00
+#SBATCH --signal=B:USR1@120
+#SBATCH --output=%x-%j.out
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_common.sh"
+[ -f "$SCRIPT_DIR/.env.narval" ] && source "$SCRIPT_DIR/.env.narval"
+
+load_narval_modules
+# shellcheck disable=SC1091
+source "$VENV_VLM/bin/activate"
+
+stage_data_to_scratch
+
+TIER_DIR_SCRATCH="$SCRATCH_REPO/experiments/vlm_tier2"
+TIER_DIR_PROJECT="$PROJECT_REPO/experiments/vlm_tier2"
+CKPT_DIR="$TIER_DIR_SCRATCH/checkpoints"
+mkdir -p "$CKPT_DIR" "$TIER_DIR_PROJECT/checkpoints"
+
+# Periodically mirror scratch checkpoints -> project while training runs, so
+# an interrupted/preempted job (or a scratch purge) doesn't lose progress.
+# HF Trainer writes checkpoint-<step>/ subdirs itself on its own
+# save_strategy — this loop just relays whatever's on disk to /project.
+SYNC_INTERVAL_SECS="${SYNC_INTERVAL_SECS:-1800}"
+sync_to_project() {
+    rsync -a "$CKPT_DIR/" "$TIER_DIR_PROJECT/checkpoints/" 2>/dev/null || true
+}
+background_sync_loop() {
+    while true; do
+        sleep "$SYNC_INTERVAL_SECS"
+        sync_to_project
+        echo "[sync] checkpoint mirrored to \$PROJECT at $(date)"
+    done
+}
+background_sync_loop &
+SYNC_PID=$!
+
+cleanup() {
+    kill "$SYNC_PID" 2>/dev/null || true
+    sync_to_project
+}
+trap 'echo "[warn] time limit approaching, syncing checkpoints now"; sync_to_project' USR1
+trap cleanup EXIT
+
+RESUME_FLAGS=()
+LATEST_CKPT="$(find_latest_hf_checkpoint "$CKPT_DIR")"
+if [ -n "$LATEST_CKPT" ]; then
+    echo "[vlm] resuming from $LATEST_CKPT"
+    RESUME_FLAGS=(--resume_from_checkpoint "$LATEST_CKPT")
+else
+    echo "[vlm] no local checkpoint found, starting fresh from $QWEN_MODEL_ID"
+fi
+
+python "$PROJECT_REPO/src/vlm/train.py" \
+    --config "$PROJECT_REPO/src/vlm/config.yaml" \
+    --train_csv "$SCRATCH_REPO/data/Train.csv" \
+    --base_image_dir "$SCRATCH_REPO/data/images" \
+    --output_dir "$CKPT_DIR" \
+    "${RESUME_FLAGS[@]}"
+
+echo "[vlm] training finished, final sync to \$PROJECT via EXIT trap"

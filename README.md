@@ -36,6 +36,9 @@ road-barbados-htr/
     ensemble/              # combining predictions across models
   submissions/            # every submission.csv we generate, timestamped
   experiments/             # one subfolder per run, with config + metrics logged
+  runners/
+    narval/                # Slurm/DRAC HPC job scripts — see runners/narval/README.md
+    colab/                  # rclone-backed Colab bootstrap notebook — see runners/colab/README.md
   requirements.txt          # shared deps (pandas, metrics, tooling)
   README.md
 ```
@@ -86,6 +89,19 @@ Verify the data at any time with:
 ```bash
 python src/data/verify.py
 ```
+
+## Other compute environments
+
+This local RTX 2050 box is one of three environments this repo trains on:
+
+- **Narval** (Slurm HPC, no internet on compute nodes) — `runners/narval/`,
+  see its README for the login-node setup → prefetch → `sbatch` → pull
+  results workflow.
+- **Colab** (code/data on Drive via `rclone`, ephemeral VM) — `runners/colab/`,
+  see its README for the one-time `rclone.conf` setup and session bootstrap.
+
+Both keep the same `src/kraken` / `src/vlm` script interfaces as this local
+setup — only the environment bootstrapping differs.
 
 ## Results log
 

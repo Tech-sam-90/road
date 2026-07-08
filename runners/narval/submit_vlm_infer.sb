@@ -1,0 +1,53 @@
+#!/bin/bash
+# VLM inference job — generate submission.csv from a trained checkpoint.
+# Light relative to training: short time, modest mem.
+#
+# NOTE: src/vlm/infer.py doesn't exist yet (built in a later prompt). This
+# script assumes the starter inference.py's CLI (--model_path/--config/
+# --test_csv/--base_image_dir/--output_csv/--device/--use_bf16/
+# --max_new_tokens/--num_beams), which the future script is expected to
+# keep for consistency.
+#
+#SBATCH --account=<FILL_IN_YOUR_ALLOCATION>
+#SBATCH --job-name=road-vlm-infer
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=0-03:00:00
+#SBATCH --output=%x-%j.out
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_common.sh"
+[ -f "$SCRIPT_DIR/.env.narval" ] && source "$SCRIPT_DIR/.env.narval"
+
+load_narval_modules
+# shellcheck disable=SC1091
+source "$VENV_VLM/bin/activate"
+
+stage_data_to_scratch
+
+TIER_DIR_PROJECT="$PROJECT_REPO/experiments/vlm_tier2"
+CKPT_DIR="$TIER_DIR_PROJECT/checkpoints"
+MODEL_PATH="${MODEL_PATH:-$CKPT_DIR/final}"
+if [ ! -d "$MODEL_PATH" ]; then
+    echo "[ERROR] no model found at $MODEL_PATH — train first, or pass MODEL_PATH=/path/to/checkpoint" >&2
+    exit 1
+fi
+
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+OUT_DIR="$SCRATCH_REPO/experiments/vlm_tier2/inference"
+mkdir -p "$OUT_DIR" "$PROJECT_REPO/submissions"
+OUT_CSV="$OUT_DIR/submission_${TIMESTAMP}.csv"
+
+python "$PROJECT_REPO/src/vlm/infer.py" \
+    --model_path "$MODEL_PATH" \
+    --config "$PROJECT_REPO/src/vlm/config.yaml" \
+    --test_csv "$SCRATCH_REPO/data/Test.csv" \
+    --base_image_dir "$SCRATCH_REPO/data/images" \
+    --output_csv "$OUT_CSV" \
+    --device auto
+
+cp "$OUT_CSV" "$PROJECT_REPO/submissions/"
+echo "[vlm] submission written to $PROJECT_REPO/submissions/$(basename "$OUT_CSV")"

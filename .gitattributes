@@ -1,0 +1,4 @@
+# Shell/sbatch scripts must keep LF endings — they run on Linux (Narval) and
+# a CRLF shebang line silently breaks execution there.
+*.sh text eol=lf
+*.sb text eol=lf

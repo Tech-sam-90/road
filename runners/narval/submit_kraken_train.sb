@@ -1,0 +1,67 @@
+#!/bin/bash
+# Kraken-OCR training job. Cheap relative to the VLM tier — modest time/mem.
+#
+# NOTE: src/kraken/train.py + src/kraken/config.yaml don't exist yet (built
+# in a later prompt). This script follows the repo's existing src/kraken/
+# layout and the starter's CLI conventions (starters/Kraken-OCR/train.py:
+# --config/--train_csv/--base_image_dir/--output/--load_model/
+# --load_hyper_parameters/--log_dir), including its own resume mechanism —
+# ketos continues training from any prior .mlmodel via --load_model plus
+# --load_hyper_parameters, so that's what we use for resume here too.
+#
+#SBATCH --account=<FILL_IN_YOUR_ALLOCATION>
+#SBATCH --job-name=road-kraken-train
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=32G
+#SBATCH --time=0-06:00:00
+#SBATCH --signal=B:USR1@120
+#SBATCH --output=%x-%j.out
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_common.sh"
+[ -f "$SCRIPT_DIR/.env.narval" ] && source "$SCRIPT_DIR/.env.narval"
+
+load_narval_modules
+# shellcheck disable=SC1091
+source "$VENV_KRAKEN/bin/activate"
+
+stage_data_to_scratch
+
+TIER_DIR_SCRATCH="$SCRATCH_REPO/experiments/kraken_tier1"
+TIER_DIR_PROJECT="$PROJECT_REPO/experiments/kraken_tier1"
+CKPT_DIR="$TIER_DIR_SCRATCH/checkpoints"
+LOG_DIR="$TIER_DIR_SCRATCH/logs"
+mkdir -p "$CKPT_DIR" "$LOG_DIR" "$TIER_DIR_PROJECT"
+
+# Requeue-safe: give us a warning before the time limit hits so we can copy
+# whatever epoch ketos last wrote before the job gets killed.
+sync_to_project() {
+    mkdir -p "$TIER_DIR_PROJECT/checkpoints" "$TIER_DIR_PROJECT/logs"
+    rsync -a "$CKPT_DIR/" "$TIER_DIR_PROJECT/checkpoints/" || true
+    rsync -a "$LOG_DIR/" "$TIER_DIR_PROJECT/logs/" || true
+}
+trap 'echo "[warn] time limit approaching, syncing checkpoints"; sync_to_project' USR1
+trap 'sync_to_project' EXIT
+
+LOAD_MODEL="$(find_latest_kraken_checkpoint "$CKPT_DIR")"
+RESUME_FLAGS=()
+if [ -n "$LOAD_MODEL" ]; then
+    echo "[kraken] resuming from $LOAD_MODEL"
+    RESUME_FLAGS=(--load_model "$LOAD_MODEL" --load_hyper_parameters)
+else
+    echo "[kraken] no local checkpoint found, starting from CATMuS pretrained: ${CATMUS_MODEL_PATH:-<unset, run prefetch_models.sh>}"
+    RESUME_FLAGS=(--load_model "${CATMUS_MODEL_PATH:?run prefetch_models.sh first}")
+fi
+
+python "$PROJECT_REPO/src/kraken/train.py" \
+    --config "$PROJECT_REPO/src/kraken/config.yaml" \
+    --train_csv "$SCRATCH_REPO/data/Train.csv" \
+    --base_image_dir "$SCRATCH_REPO/data/images" \
+    --output "$CKPT_DIR/kraken_model" \
+    --log_dir "$LOG_DIR" \
+    "${RESUME_FLAGS[@]}"
+
+echo "[kraken] training finished, final sync to \$PROJECT via EXIT trap"
