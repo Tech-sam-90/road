@@ -12,3 +12,5 @@ tqdm
 jiwer
 pyyaml
 matplotlib
+scikit-learn
+pytest
