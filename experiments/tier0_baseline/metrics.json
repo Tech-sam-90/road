@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-09",
+  "tier": "tier0_baseline",
+  "model": "Qwen/Qwen2-VL-2B-Instruct (zero-shot, 4-bit, no fine-tuning)",
+  "eval_set": "data/val_split.csv",
+  "matched": 410,
+  "total_reference": 410,
+  "weighted_cer": 0.4329,
+  "weighted_wer": 0.6916,
+  "final_score": 0.5622,
+  "submission_file": "submissions/tier0_baseline_20260709-000223.csv",
+  "public_lb_score": null,
+  "notes": "Not a real leaderboard score — local sanity check only, to confirm the pipeline produces non-garbage output before submitting."
+}

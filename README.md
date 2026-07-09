@@ -84,6 +84,13 @@ Package installation was not run yet as part of repo setup (large downloads,
 GPU-specific torch builds) — run the `pip install` step above inside each venv
 before training.
 
+`.venv-vlm` currently has only what the tier0 zero-shot baseline needed
+(`torch` — note: install from `--index-url https://download.pytorch.org/whl/cu124`,
+plain `pip install torch` resolves to a CPU-only wheel on this machine —
+`transformers`, `accelerate`, `bitsandbytes`, `pillow`, `tqdm`, `pyyaml`,
+`pandas`), not the full `src/vlm/requirements.txt` (`peft`/`trl`/`datasets`/
+`evaluate`/`av`/`scikit-learn` still need installing before fine-tuning).
+
 Verify the data at any time with:
 
 ```bash
@@ -103,8 +110,31 @@ This local RTX 2050 box is one of three environments this repo trains on:
 Both keep the same `src/kraken` / `src/vlm` script interfaces as this local
 setup — only the environment bootstrapping differs.
 
+## Tier 0: zero-shot baseline
+
+`src/vlm/tier0_baseline_infer.py` runs the base (non-fine-tuned)
+`Qwen/Qwen2-VL-2B-Instruct`, 4-bit quantized, against line-crop images with
+the same "transcribe exactly as seen" prompt as the starter. It exists to
+de-risk the submission pipeline (CSV format, ID coverage, scorer wiring)
+before investing in real fine-tuning — not to score well. Fits in ~1.8GB of
+this card's 4GB VRAM; ~3.6s/image.
+
+```bash
+source .venv-vlm/Scripts/activate
+python -m src.vlm.tier0_baseline_infer --input_csv data/val_split.csv --output_csv <preds.csv>
+python -m src.metrics.weighted_wer_cer --gt data/val_split.csv --pred <preds.csv>
+python -m src.vlm.tier0_baseline_infer --input_csv data/Test.csv --output_csv submissions/tier0_baseline_<timestamp>.csv
+python -m src.vlm.validate_submission --submission submissions/tier0_baseline_<timestamp>.csv --sample_submission data/SampleSubmission.csv
+```
+
+`validate_submission.py` checks the ID set matches `SampleSubmission.csv`
+exactly, no duplicates, and no empty/NaN `Target` values before upload.
+Empty model outputs are replaced with the placeholder `[illegible]` rather
+than left blank (a blank scores the same maximum-edit-distance penalty
+either way — the placeholder just guarantees a well-formed CSV).
+
 ## Results log
 
 | Date | Tier | Model | Local weighted CER | Local weighted WER | Local final score | Public LB score |
 |------|------|-------|---------------------|---------------------|--------------------|------------------|
-|      |      |       |                     |                     |                    |                  |
+| 2026-07-09 | Tier 0 (zero-shot) | Qwen2-VL-2B-Instruct, 4-bit, no fine-tuning | 0.4329 | 0.6916 | 0.5622 | not submitted yet |

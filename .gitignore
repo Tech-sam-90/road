@@ -30,6 +30,10 @@ rclone.conf
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+
+# Scratch run logs / intermediate prediction files, not the final artifacts
+.runlogs/
 
 # OS / editor cruft
 .DS_Store

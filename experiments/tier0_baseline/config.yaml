@@ -1,0 +1,20 @@
+tier: tier0_baseline
+description: >
+  Zero-shot baseline, no fine-tuning. Exists to de-risk the submission
+  pipeline (CSV format, ID coverage, scorer wiring) before investing in
+  real fine-tuning.
+date: 2026-07-09
+model_id: Qwen/Qwen2-VL-2B-Instruct
+quantization: 4-bit nf4 (bitsandbytes)
+script: src/vlm/tier0_baseline_infer.py
+prompt: >
+  Transcribe EXACTLY as seen. Preserve line breaks, punctuation, and spacing.
+  Do not add explanations. Return verbatim transcription. No paraphrasing.
+  No normalization.
+max_new_tokens: 64
+num_beams: 1
+decoding: greedy (do_sample=False)
+empty_placeholder: "[illegible]"
+val_split_fallback_count: 0
+test_fallback_count: 0
+inference_speed: ~3.6s/image (RTX 2050, 4GB VRAM, ~1.8GB peak reserved)
