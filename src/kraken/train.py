@@ -47,12 +47,19 @@ def load_config(config_path):
 def build_ketos_command(
     train_manifest, val_manifest, output, log_dir, device, seed,
     load_model=None, load_hyper_parameters=False, resize=None,
-    epochs=-1, batch_size=16, ketos_bin="ketos",
+    epochs=-1, batch_size=16, workers=None, ketos_bin="ketos",
 ):
+    if workers is None:
+        # ketos defaults to 1 dataloader worker, which leaves the GPU idle
+        # waiting on CPU-bound image preprocessing (confirmed in a real
+        # run: kraken's own warning flagged this exact bottleneck).
+        workers = min(os.cpu_count() or 4, 8)
+
     cmd = [
         ketos_bin,
         "--device", device,
         "--seed", str(seed),
+        "--workers", str(workers),
         "train",
         "-t", train_manifest,
         "-e", val_manifest,
@@ -103,7 +110,7 @@ def _stream_subprocess(cmd):
 def run_training(
     config_path=None, train_csv=None, val_csv=None, base_image_dir=None,
     output=None, log_dir=None, load_model=None, load_hyper_parameters=False,
-    resize=None, epochs=None, batch_size=None, device=None, seed=42,
+    resize=None, epochs=None, batch_size=None, workers=None, device=None, seed=42,
     train_data_dir=None, val_data_dir=None, ketos_bin="ketos", dry_run=False,
 ):
     cfg = load_config(config_path)
@@ -117,6 +124,7 @@ def run_training(
     load_model = load_model if load_model is not None else cfg_train.get("load_model")
     epochs = epochs if epochs is not None else cfg_train.get("epochs", -1)
     batch_size = batch_size if batch_size is not None else cfg_train.get("batch_size", 16)
+    workers = workers if workers is not None else cfg_train.get("workers")
     train_data_dir = train_data_dir or cfg_train.get(
         "train_data_dir", os.path.join(REPO_ROOT, "experiments", "tier1_kraken", "kraken_train_data"))
     val_data_dir = val_data_dir or cfg_train.get(
@@ -147,7 +155,7 @@ def run_training(
     cmd = build_ketos_command(
         train_manifest, val_manifest, output, log_dir, device, seed,
         load_model=load_model, load_hyper_parameters=load_hyper_parameters,
-        resize=resize, epochs=epochs, batch_size=batch_size, ketos_bin=ketos_bin,
+        resize=resize, epochs=epochs, batch_size=batch_size, workers=workers, ketos_bin=ketos_bin,
     )
 
     print("[train] command:", " ".join(cmd), flush=True)
@@ -172,6 +180,9 @@ def main():
     parser.add_argument("--resize", default=None, choices=["add", "union", "both", "new", "fail"])
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--workers", type=int, default=None,
+                         help="Dataloader worker processes (ketos --workers). Default: min(cpu_count, 8) — "
+                              "ketos itself defaults to 1, which bottlenecks the GPU on CPU-bound image preprocessing.")
     parser.add_argument("--device", default=None, help="cpu or cuda:0 — default: auto-detect")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dry_run", action="store_true", help="Build manifests and print the ketos command without running it")
@@ -181,7 +192,7 @@ def main():
         config_path=args.config, train_csv=args.train_csv, val_csv=args.val_csv,
         base_image_dir=args.base_image_dir, output=args.output, log_dir=args.log_dir,
         load_model=args.load_model, load_hyper_parameters=args.load_hyper_parameters,
-        resize=args.resize, epochs=args.epochs, batch_size=args.batch_size,
+        resize=args.resize, epochs=args.epochs, batch_size=args.batch_size, workers=args.workers,
         device=args.device, seed=args.seed, dry_run=args.dry_run,
     )
 
