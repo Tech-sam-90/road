@@ -60,6 +60,7 @@ def build_ketos_command(
         "-o", output,
         "-N", str(epochs),
         "-B", str(batch_size),
+        "-F", "1",  # report/checkpoint every epoch (ketos default anyway) — explicit so it's not silently changed later
         "--log-dir", log_dir,
     ]
     if load_model:
@@ -69,6 +70,34 @@ def build_ketos_command(
         if resize:
             cmd.extend(["--resize", resize])
     return cmd
+
+
+def _stream_subprocess(cmd):
+    """Runs cmd, relaying its output to our own stdout line-by-line with an
+    immediate flush after each line.
+
+    subprocess.run(cmd, check=True) alone looked completely frozen in
+    practice (confirmed: a real run sat silent long enough to get
+    KeyboardInterrupt'd) — the classic cause is that ketos's own stdout
+    isn't a real terminal when piped through a subprocess, so CPython
+    switches from line-buffered to fully block-buffered output and doesn't
+    flush until several KB accumulate or the process exits. PYTHONUNBUFFERED
+    forces ketos's own process to flush immediately regardless of whether
+    its stdout is a TTY; the manual flush=True below then makes sure WE
+    relay it immediately too instead of adding another buffering layer on
+    top.
+    """
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    process = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1, env=env,
+    )
+    for line in iter(process.stdout.readline, ""):
+        print(line, end="", flush=True)
+    process.stdout.close()
+    returncode = process.wait()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, cmd)
 
 
 def run_training(
@@ -121,12 +150,12 @@ def run_training(
         resize=resize, epochs=epochs, batch_size=batch_size, ketos_bin=ketos_bin,
     )
 
-    print("[train] command:", " ".join(cmd))
+    print("[train] command:", " ".join(cmd), flush=True)
     if dry_run:
         print("[train] --dry_run set, not invoking ketos")
         return cmd
 
-    subprocess.run(cmd, check=True)
+    _stream_subprocess(cmd)
     return cmd
 
 
