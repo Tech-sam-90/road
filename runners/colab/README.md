@@ -97,7 +97,7 @@ Everything in this runner set assumes:
 If you rename anything, update `REMOTE` / `DRIVE_ROOT` at the top of
 `bootstrap.ipynb` to match.
 
-## Running a session
+## Running a VLM session
 
 Open `bootstrap.ipynb` in Colab, run all cells top to bottom. It: checks
 your GPU tier (T4/L4/A100/etc — not guaranteed, especially on free tier),
@@ -107,6 +107,35 @@ weights + any existing checkpoint down to local Colab disk (`/content/...`
 reinstalls `requirements.txt` fresh, and sets up checkpoint resume plus a
 periodic push-back callback for `src/vlm/train.py` (built in a later
 prompt) to use.
+
+## Running a Tier 1 Kraken training session
+
+Same one-time `RCLONE_CONF` setup as above, different notebook:
+**`train_kraken.ipynb`** — self-contained, doesn't need `bootstrap.ipynb`
+run first.
+
+**Upload instructions:** in Colab, File → Upload notebook → pick
+`runners/colab/train_kraken.ipynb` from your local checkout (or open it
+directly from Drive B if you've already synced the repo there — Colab can
+open `.ipynb` files straight from a mounted/linked Drive folder). Then:
+Runtime → Change runtime type → GPU, and Run all (Ctrl+F9 / Runtime → Run
+all).
+
+It installs Kraken (not the VLM/transformers stack — separate, smaller,
+faster install), pulls `train_split.csv`/`val_split.csv`/`Test.csv` +
+images, fetches the CATMuS pretrained model (cached to Drive after the
+first run so it isn't re-downloaded every session), fine-tunes via
+`src/kraken/train.py` (same script `runners/narval/submit_kraken_train.sb`
+calls — only the environment differs), then runs `src/kraken/infer.py` —
+the pageseg-bug-fixed direct line recognizer — against `val_split.csv` for
+a local score and against `Test.csv` to produce
+`submissions/tier1_kraken_<timestamp>.csv`, validated the same way as the
+Tier 0 baseline.
+
+Checkpoints (`ketos train` writes a new `.mlmodel` per epoch) sync to
+`roadB:road-barbados-htr/experiments/tier1_kraken/checkpoints/` every 2
+minutes via a background thread while training runs, plus once more at the
+end — protection against Colab's session/idle timeouts.
 
 ## Switching Colab accounts
 

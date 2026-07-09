@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-09",
+  "tier": "tier1_kraken",
+  "model": "Kraken fine-tuned from CATMuS (DOI 10.5281/zenodo.10592716)",
+  "status": "pipeline built and verified, training not yet run (training happens on Colab, not locally, per instruction)",
+  "eval_set": "data/val_split.csv",
+  "matched": null,
+  "total_reference": null,
+  "weighted_cer": null,
+  "weighted_wer": null,
+  "final_score": null,
+  "submission_file": null,
+  "public_lb_score": null,
+  "sanity_check": {
+    "description": "src/kraken/infer.py's pageseg bug fix verified against the zero-shot (not fine-tuned) CATMuS pretrained model on 5 val_split images: no crashes, no exceptions, no empty/fallback predictions.",
+    "file": "experiments/tier1_kraken/infer_bugfix_sanity_check_zeroshot_preds.csv",
+    "note": "Output quality is poor (expected — zero-shot, unfine-tuned, on handwriting the base model has never seen). This only confirms the bug fix produces well-formed non-empty text, not that the model is accurate yet."
+  },
+  "notes": "Run runners/colab/train_kraken.ipynb to train, then re-run src/kraken/infer.py + src/metrics/weighted_wer_cer.py locally (or the notebook does this itself) to fill in the real scores here."
+}

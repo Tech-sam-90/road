@@ -1,0 +1,29 @@
+# Defaults for src/kraken/{train,infer}.py. All values here can be
+# overridden by CLI flags; paths are resolved relative to the repo root by
+# each script (no manually-maintained repo_root, unlike the starter).
+
+training:
+  train_csv: "data/train_split.csv"
+  val_csv: "data/val_split.csv"
+  base_image_dir: "data/images"
+  output: "experiments/tier1_kraken/checkpoints/kraken_model"
+  log_dir: "experiments/tier1_kraken/logs"
+  train_data_dir: "experiments/tier1_kraken/kraken_train_data"
+  val_data_dir: "experiments/tier1_kraken/kraken_val_data"
+  load_model: null   # set to the CATMuS .mlmodel path for the first run
+  epochs: -1          # -1 = run until early stopping (ketos default)
+  batch_size: 16
+
+inference:
+  model_path: "experiments/tier1_kraken/checkpoints/kraken_model_best.mlmodel"
+  test_csv: "data/Test.csv"
+  base_image_dir: "data/images"
+  output_csv: "submissions/tier1_kraken.csv"
+  pad: 0               # images are already tight single-line crops
+  text_direction: "horizontal-lr"
+  bidi_reordering: true
+  baseline_frac: 0.75  # synthetic baseline position, see infer.py
+  lm_rescore: false    # opt-in, not yet validated against a trained model
+
+evaluation:
+  weight_factor: 0.5

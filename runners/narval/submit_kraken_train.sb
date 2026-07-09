@@ -30,8 +30,8 @@ source "$VENV_KRAKEN/bin/activate"
 
 stage_data_to_scratch
 
-TIER_DIR_SCRATCH="$SCRATCH_REPO/experiments/kraken_tier1"
-TIER_DIR_PROJECT="$PROJECT_REPO/experiments/kraken_tier1"
+TIER_DIR_SCRATCH="$SCRATCH_REPO/experiments/tier1_kraken"
+TIER_DIR_PROJECT="$PROJECT_REPO/experiments/tier1_kraken"
 CKPT_DIR="$TIER_DIR_SCRATCH/checkpoints"
 LOG_DIR="$TIER_DIR_SCRATCH/logs"
 mkdir -p "$CKPT_DIR" "$LOG_DIR" "$TIER_DIR_PROJECT"
@@ -58,7 +58,8 @@ fi
 
 python "$PROJECT_REPO/src/kraken/train.py" \
     --config "$PROJECT_REPO/src/kraken/config.yaml" \
-    --train_csv "$SCRATCH_REPO/data/Train.csv" \
+    --train_csv "$SCRATCH_REPO/data/train_split.csv" \
+    --val_csv "$SCRATCH_REPO/data/val_split.csv" \
     --base_image_dir "$SCRATCH_REPO/data/images" \
     --output "$CKPT_DIR/kraken_model" \
     --log_dir "$LOG_DIR" \

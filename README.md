@@ -31,7 +31,9 @@ road-barbados-htr/
   src/
     metrics/              # weighted WER/CER implementation
     data/                 # dataset loading, verification, splits
-    kraken/                # Kraken-OCR training/inference (.venv-kraken)
+    kraken/                # Kraken-OCR training/inference (.venv-kraken):
+                            #   prepare_data.py, train.py, infer.py (pageseg bug fixed),
+                            #   lm_rescore.py (opt-in lexicon+bigram rescoring)
     vlm/                    # Qwen/transformers VLM fine-tuning (.venv-vlm)
     ensemble/              # combining predictions across models
   submissions/            # every submission.csv we generate, timestamped
@@ -105,7 +107,8 @@ This local RTX 2050 box is one of three environments this repo trains on:
   see its README for the login-node setup → prefetch → `sbatch` → pull
   results workflow.
 - **Colab** (code/data on Drive via `rclone`, ephemeral VM) — `runners/colab/`,
-  see its README for the one-time `rclone.conf` setup and session bootstrap.
+  see its README for the one-time `rclone.conf` setup and session bootstrap
+  (`bootstrap.ipynb` for VLM, `train_kraken.ipynb` for Tier 1 Kraken training).
 
 Both keep the same `src/kraken` / `src/vlm` script interfaces as this local
 setup — only the environment bootstrapping differs.
@@ -133,8 +136,55 @@ Empty model outputs are replaced with the placeholder `[illegible]` rather
 than left blank (a blank scores the same maximum-edit-distance penalty
 either way — the placeholder just guarantees a well-formed CSV).
 
+## Tier 1: Kraken, fine-tuned from CATMuS
+
+Fixes a real bug in `starters/Kraken-OCR/inference.py`: every image here is
+already a single pre-cropped text line, but that script still ran
+`kraken.pageseg.segment()` (full-page layout analysis) on each one before
+recognition, which produces garbage/empty output on a line crop — there's
+no page layout to find. `src/kraken/infer.py` never calls `pageseg`; it
+builds a synthetic single-line `kraken.containers.Segmentation` covering
+the whole image and calls `kraken.rpred.rpred` directly. Two more bugs
+found and fixed along the way (both verified against the installed
+`kraken==6.0.3` and pinned in `tests/test_kraken_infer.py`): the
+segmentation must be `type='baselines'`, not `'bbox'` (CATMuS is
+baseline-trained; bbox-type input runs but produces garbled non-Latin
+output), and polygon/baseline coordinates must be strictly `< (width,
+height)` — using `width`/`height` themselves as the boundary's far corner
+raises `"Line polygon outside of image bounds"`.
+
+- `src/kraken/prepare_data.py` — converts `train_split.csv`/`val_split.csv`
+  into Kraken's `path`-format training data (image + `.gt.txt` sidecar +
+  manifest).
+- `src/kraken/train.py` — wraps `ketos train` (subprocess), fine-tuning
+  from the CATMuS pretrained model (Zenodo DOI `10.5281/zenodo.10592716`)
+  with `--resize new` on the first run. Validates via `ketos train`'s
+  explicit `-e/--evaluation-files` flag against `val_split.csv` — the same
+  stratified split every tier uses, not a random re-split — so CER/WER are
+  comparable across tiers.
+- `src/kraken/infer.py` — the bug-fixed direct line recognizer described
+  above. `--lm_rescore` opts into `src/kraken/lm_rescore.py`, a word-level
+  lexicon + bigram rescoring pass over already-decoded output (only
+  touches out-of-vocabulary words). **Not yet validated against a trained
+  model** — a true lattice-level LM rescore would need kraken's internal
+  per-timestep decode output, which `rpred()` doesn't expose without
+  reaching into version-fragile internals; the word-level pass was the
+  feasible alternative given no trained checkpoint existed yet to validate
+  against either approach.
+
+**Training runs on Colab, not locally** (`runners/colab/train_kraken.ipynb`
+— self-contained, see `runners/colab/README.md` for upload/run
+instructions). Locally, the bug fix was sanity-checked against the
+zero-shot (not fine-tuned) CATMuS model on 5 `val_split` images — confirmed
+non-empty, well-formed output with no crashes
+(`experiments/tier1_kraken/infer_bugfix_sanity_check_zeroshot_preds.csv`);
+quality is poor as expected for an unfine-tuned model on unseen handwriting.
+Real CER/WER/final scores land in `experiments/tier1_kraken/metrics.json`
+and the Results log below once training completes.
+
 ## Results log
 
 | Date | Tier | Model | Local weighted CER | Local weighted WER | Local final score | Public LB score |
 |------|------|-------|---------------------|---------------------|--------------------|------------------|
-| 2026-07-09 | Tier 0 (zero-shot) | Qwen2-VL-2B-Instruct, 4-bit, no fine-tuning | 0.4329 | 0.6916 | 0.5622 | not submitted yet |
+| 2026-07-09 | Tier 0 (zero-shot) | Qwen2-VL-2B-Instruct, 4-bit, no fine-tuning | 0.4329 | 0.6916 | 0.5622 | 0.35 |
+| pending | Tier 1 (Kraken) | Kraken fine-tuned from CATMuS (`10.5281/zenodo.10592716`) | pending Colab training | pending | pending | not submitted yet |

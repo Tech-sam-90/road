@@ -1,0 +1,54 @@
+tier: tier1_kraken
+description: >
+  Kraken-OCR fine-tuned from the CATMuS historical-manuscript pretrained
+  model (Zenodo DOI 10.5281/zenodo.10592716), starting from
+  starters/Kraken-OCR's page-segmentation bug fixed: every image here is
+  already a single pre-cropped text line, so src/kraken/infer.py never
+  calls kraken.pageseg.segment() — it constructs a synthetic full-image
+  baseline segmentation and calls kraken.rpred.rpred directly.
+date: 2026-07-09
+base_model: CATMuS (catmus-print-fondue-large.mlmodel, DOI 10.5281/zenodo.10592716)
+scripts:
+  prepare_data: src/kraken/prepare_data.py
+  train: src/kraken/train.py
+  infer: src/kraken/infer.py
+  lm_rescore: src/kraken/lm_rescore.py (opt-in, --lm_rescore)
+train_csv: data/train_split.csv
+val_csv: data/val_split.csv
+resize: new (first run only, then --load_hyper_parameters on resume)
+training_location: Colab (runners/colab/train_kraken.ipynb) — not run locally by design
+bug_fixes:
+  - >
+    Removed kraken.pageseg.segment() call entirely (starter ran full-page
+    segmentation on pre-cropped single-line images, which produces
+    garbage/empty output). Replaced with a synthetic single-line
+    Segmentation covering the whole image.
+  - >
+    Segmentation type must be 'baselines', not 'bbox' — CATMuS (like all
+    modern kraken recognition models) was trained on baseline segmentation.
+    Feeding it bbox-type segmentation runs but kraken warns "will likely
+    result in severely degraded performance"; verified empirically (garbled
+    non-Latin-character output) before the fix.
+  - >
+    kraken.lib.segmentation requires every polygon/baseline coordinate
+    strictly < (width, height) — using width/height themselves (not
+    width-1/height-1) as the boundary's max corner raises "Line polygon
+    outside of image bounds". Off-by-one, verified against kraken's source
+    (kraken/lib/segmentation.py) and pinned with a regression test
+    (tests/test_kraken_infer.py).
+lm_rescoring:
+  status: implemented, opt-in, NOT validated against a trained model yet
+  approach: >
+    Word-level lexicon + bigram rescoring pass over rpred's already-decoded
+    output (src/kraken/lm_rescore.py) — only touches out-of-vocabulary
+    words, replacing them with an edit-distance-bounded in-vocabulary
+    candidate scored by bigram probability given the previous word.
+  why_not_lattice_rescoring: >
+    kraken's rpred() returns a fully CTC-decoded string, not the
+    per-timestep lattice/logits a true lattice-level LM rescoring pass
+    would need. Reaching into kraken.lib.models' internal decode path for
+    that would be version-fragile and, with no trained checkpoint to
+    validate against at the time this was written, premature to build.
+  validate_before_trusting: >
+    Compare val_split weighted CER/WER with and without --lm_rescore once
+    a Colab-trained checkpoint exists.
